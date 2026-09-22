@@ -27,7 +27,7 @@
                 <button onclick="switchTab('home')" class="hover:text-amber-400 font-semibold text-sm md:text-base"><i class="fa-solid fa-house"></i> Home</button>
                 <button onclick="switchTab('admin')" class="hover:text-amber-400 font-semibold text-sm md:text-base"><i class="fa-solid fa-user-shield"></i> Admin Panel</button>
                 <div id="authContainer">
-                    <button id="loginBtn" onclick="handleAuth()" class="bg-amber-500 hover:bg-amber-600 text-black font-bold px-3 py-1.5 rounded-lg text-sm transition">Login</button>
+                    <button id="loginBtn" onclick="login()" class="bg-amber-500 hover:bg-amber-600 text-black font-bold px-3 py-1.5 rounded-lg text-sm transition">Login</button>
                 </div>
             </nav>
         </div>
@@ -45,7 +45,6 @@
 
             <h3 class="text-xl font-bold text-amber-400 border-l-4 border-amber-500 pl-3">রানিং টুর্নামেন্ট সমূহ</h3>
             <div id="tournamentsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Tournaments will be injected dynamically -->
                 <p class="text-gray-400 text-sm">টুর্নামেন্ট লোড হচ্ছে...</p>
             </div>
         </section>
@@ -76,10 +75,9 @@
     <!-- Firebase Script Integration -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyANredBWaU-YxNKPkub_w-BkyAfVjX4yfo",
             authDomain: "ff-tournament-1b4c9.firebaseapp.com",
@@ -89,7 +87,6 @@
             appId: "1:749214669988:web:e1e09ec20b7645ad76da31"
         };
 
-        // Initialize Firebase Services
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -97,14 +94,16 @@
 
         let currentUser = null;
 
-        // Authentication State Listener
+        // Redirect রেজাল্ট চেক করা (মোবাইল ব্রাউজারের জন্য)
+        getRedirectResult(auth).catch((error) => console.error("Redirect Error:", error));
+
         onAuthStateChanged(auth, (user) => {
             currentUser = user;
             const authContainer = document.getElementById('authContainer');
             if (user) {
                 authContainer.innerHTML = `
                     <div class="flex items-center gap-2">
-                        <img src="${user.photoURL}" class="w-8 h-8 rounded-full border border-amber-500">
+                        <img src="${user.photoURL || 'https://via.placeholder.com/32'}" class="w-8 h-8 rounded-full border border-amber-500">
                         <button onclick="logout()" class="bg-red-600 hover:bg-red-700 text-white text-xs px-2.5 py-1.5 rounded-lg transition">Logout</button>
                     </div>
                 `;
@@ -115,11 +114,22 @@
             }
         });
 
-        // Auth Functions
-        window.login = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
+        // ব্রাউজার সামঞ্জস্য রেখে লগইন হ্যান্ডলিং
+        window.login = async () => {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                // পপআপ ব্লক বা sessionStorage সমস্যা থাকলে Redirect মেথড ব্যবহার করবে
+                if (error.code === 'auth/popup-blocked' || error.code === 'auth/web-storage-unsupported' || error.message.includes('missing initial state')) {
+                    signInWithRedirect(auth, provider);
+                } else {
+                    alert("লগইন সমস্যা: " + error.message);
+                }
+            }
+        };
+
         window.logout = () => signOut(auth);
 
-        // Tab Switching Logic
         window.switchTab = (tab) => {
             document.getElementById('homeView').classList.add('hidden');
             document.getElementById('adminView').classList.add('hidden');
@@ -128,7 +138,6 @@
             if (tab === 'admin') document.getElementById('adminView').classList.remove('hidden');
         };
 
-        // Add Tournament Logic
         const form = document.getElementById('createTournamentForm');
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -151,7 +160,6 @@
             }
         });
 
-        // Real-time Tournament Listener
         onSnapshot(collection(db, "tournaments"), (snapshot) => {
             const list = document.getElementById('tournamentsList');
             list.innerHTML = "";
